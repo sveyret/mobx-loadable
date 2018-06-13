@@ -101,9 +101,20 @@ When only one parameter is given to `@load`, the first parameter given to the de
 
 When the second parameter given to `@load` is a function, this function will be called with the decorated method arguments and must return a boolean which will be used as the loading state value.
 
-## Loading
+## Loading and non-objects
 
-In order for the loading state to be added, the property must be an object. If it is not the case, it will be transformed into an object when the loading state is set to `true`. In other words, if the property is `undefined`, `null`, a string, a number, a boolean or a symbol, it will become an object each time it is loaded. For that reason, you may use the `Loading` type for such properties:
+In order for the loading state to be added, the property must be an object. If it is not the case, it will be transformed into an object when the loading state is set to `true`. In other words, while the property is loading:
+
+| if the property is | it will become |
+|--------------------|----------------|
+| `undefined`        | {}             |
+| `null`             | {}             |
+| boolean            | Boolean        |
+| number             | Number         |
+| string             | String         |
+| symbol             | Symbol         |
+
+So **you have to be careful when using the property** (e.g. as a non empty object, a Boolean with value `false` will be truthy inside a `if`). If the real value is not needed while loading, you may indicate that the property can return a value of type `Loading`:
 
 ```typescript
   @computed

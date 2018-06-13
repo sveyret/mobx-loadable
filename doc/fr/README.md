@@ -93,9 +93,20 @@ Lorsqu'un seul paramètre est donné à `@load`, le premier paramètre passé à
 
 Lorsque le second paramètre donné à `@load` est une fonction, celle-ci sera appelée avec les paramètres de la méthode décorée et doit renvoyer un booléen qui sera utilisé comme valeur du statut de chargement.
 
-## Loading
+## Loading et non-objets
 
-Afin d'ajouter le statut de chargement, la propriété doit être un objet. Si ce n'est pas le cas, elle sera transformée en objet lorsque le statut de chargement est positionné sur `true`. Autrement dit, si la propriété est `undefined`, `null`, une _string_, un _number_, un _boolean_ ou un _symbol_, elle deviendra un objet à chaque fois qu'elle est chargée. Pour cette raison, il peut être utile d'ajouter le type `Loading` pour de telles propriétés :
+Afin d'ajouter le statut de chargement, la propriété doit être un objet. Si ce n'est pas le cas, elle sera transformée en objet lorsque le statut de chargement est positionné sur `true`. Autrement dit, lorsque la propriété est en cours de chargement :
+
+| si la propriété est | elle deviendra |
+|---------------------|----------------|
+| `undefined`         | {}             |
+| `null`              | {}             |
+| boolean             | Boolean        |
+| number              | Number         |
+| string              | String         |
+| symbol              | Symbol         |
+
+**Il faut donc faire attention lorsque la propriété est utilisée** (par exemple, un Boolean contenant la valeur `false` étant un objet non vide, il sera évalué comme vrai dans un `if`). Si la valeur réelle n'est pas utilisée en cours de chargement, il est possible d'indiquer que la propriété peut renvoyer une valeur de type `Loading` :
 
 ```typescript
   @computed
