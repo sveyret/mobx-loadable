@@ -2,13 +2,103 @@
 // tslint:disable:no-unused-expression (chai expressions are indeed used)
 // tslint:disable:only-arrow-functions (arrow functions are not recommanded for mocha)
 import { expect } from 'chai'
-import { IReactionDisposer, autorun, configure } from 'mobx'
+import { IReactionDisposer, action, autorun, computed, configure } from 'mobx'
 
-import { isLoading, load, loadable } from '.'
-import ExampleClass, { Person } from './ExampleClass.spec'
+import { Loading, isLoading, load, loadable } from '.'
 
 // Configure in strict mode
 configure({ enforceActions: true })
+
+interface Person {
+  firstName: string
+  lastName: string
+}
+
+const MOTO: string =
+  'Timigu min, kaj mi obeos honte ; konvinku min, kaj mi obeos volonte'
+
+class ExampleClass {
+  @loadable() public readonly persons: Person[] = []
+  private counter: number = 0
+  @loadable private _boss: Person
+  @loadable private _moto?: string
+
+  public constructor(private readonly people: Person[]) {
+    this._boss = people[this.counter]
+  }
+
+  @load('persons', true)
+  public loadPersons() {
+    return new Promise<void>(res => {
+      setTimeout(() => {
+        this.updatePersons(this.persons.length === 0 ? this.people : [])
+        res()
+      }, 100)
+    })
+  }
+
+  public async loadBoss() {
+    this.setBossLoading(true)
+    return new Promise<void>(res => {
+      setTimeout(() => {
+        if (++this.counter > this.people.length) {
+          this.counter = 0
+        }
+        this.updateBoss(this.people[this.counter])
+        res()
+      }, 100)
+    })
+  }
+
+  public async loadMoto() {
+    this.updateMoto()
+    return new Promise<void>(res => {
+      setTimeout(() => {
+        this.updateMoto(MOTO)
+        res()
+      }, 100)
+    })
+  }
+
+  public get boss() {
+    return this._boss
+  }
+
+  @computed
+  public get moto(): undefined | { moto: string } | Loading {
+    if (this._moto === undefined || isLoading(this._moto)) {
+      return this._moto
+    } else {
+      return { moto: this._moto }
+    }
+  }
+
+  @action
+  @load('persons', false)
+  private updatePersons(persons: Person[]) {
+    while (this.persons.length > 0) {
+      this.persons.pop()
+    }
+    this.persons.push(...persons)
+  }
+
+  @action
+  private updateBoss(boss: Person) {
+    this._boss = boss
+    this.setBossLoading(false)
+  }
+
+  @load('_boss')
+  private setBossLoading(_status: boolean) {
+    // Everything is done in decorator
+  }
+
+  @action
+  @load('_moto', (moto: any) => !moto)
+  private updateMoto(moto?: string) {
+    this._moto = moto
+  }
+}
 
 const FAMOUS: Person[] = [
   { firstName: 'Mohandas Karamchand', lastName: 'Gandhi' },
@@ -41,12 +131,15 @@ describe('@loadable', function() {
         })
       )
     })
-    expect(isLoading(example.persons)).to.be.false
-    expect(isLoading(example.boss)).to.be.false
-    expect(isLoading(example.moto)).to.be.false
-    expect(example.persons.length).to.equal(0)
-    expect(example.boss).to.deep.equal(FAMOUS[0])
-    expect(example.moto).to.be.undefined
+    expect(
+      isLoading(example.persons),
+      'Persons should not be loading'
+    ).to.be.false
+    expect(isLoading(example.boss), 'Boss should not be loading').to.be.false
+    expect(isLoading(example.moto), 'Moto should not be loading').to.be.false
+    expect(example.persons, 'Unexpected value for persons').to.have.lengthOf(0)
+    expect(example.boss, 'Unexpected value for boss').to.deep.equal(FAMOUS[0])
+    expect(example.moto, 'Unexpected value for moto').to.be.undefined
   })
 
   afterEach('Clean up', function() {
@@ -56,21 +149,21 @@ describe('@loadable', function() {
   it('must throw an error if applying to a non modifiable property', function() {
     Object.defineProperty(example, 'non-modifiable', { configurable: false })
     expect(() => loadable(example, 'non-modifiable')).to.throw(
-      'Cannot convert non-modifiable to loadable'
+      /cannot convert non-modifiable to loadable/i
     )
   })
 
   it('must throw an error if non applied on property given to @load', function() {
     const descriptor: any = Object.getOwnPropertyDescriptor(example, 'loadMoto')
     expect(() => load('counter')(example, 'loadMoto', descriptor)).to.throw(
-      'is not a @loadable'
+      /is not a @loadable/i
     )
   })
 
   it('must throw an error if non existing property given to @load', function() {
     const descriptor: any = Object.getOwnPropertyDescriptor(example, 'loadMoto')
     expect(() => load('unknown')(example, 'loadMoto', descriptor)).to.throw(
-      'is not a @loadable'
+      /is not a @loadable/i
     )
   })
 
@@ -78,23 +171,54 @@ describe('@loadable', function() {
     it('must indicate when loading', async function() {
       let promise
       promise = example.loadPersons()
-      expect(example.persons.length).to.equal(0)
-      expect(isLoading(example.persons)).to.be.true
-      expect(counters.persons).to.equal(1)
+      expect(
+        example.persons,
+        'Persons should not be loaded yet'
+      ).to.have.lengthOf(0)
+      expect(isLoading(example.persons), 'Persons should be loading').to.be.true
+      expect(
+        counters.persons,
+        'Update state of persons should have been detected'
+      ).to.equal(1)
       await promise
-      expect(example.persons.length).to.equal(FAMOUS.length)
-      expect(isLoading(example.persons)).to.be.false
-      expect(counters.persons).to.equal(2)
+      expect(
+        example.persons,
+        'All persons should now be loaded'
+      ).to.have.lengthOf(FAMOUS.length)
+      expect(
+        isLoading(example.persons),
+        'Persons should not be loading anymore'
+      ).to.be.false
+      expect(
+        counters.persons,
+        'Update state of persons should have been detected'
+      ).to.equal(2)
       promise = example.loadPersons()
-      expect(example.persons.length).to.equal(FAMOUS.length)
-      expect(isLoading(example.persons)).to.be.true
-      expect(counters.persons).to.equal(3)
+      expect(
+        example.persons,
+        'Persons should have kept old values'
+      ).to.have.lengthOf(FAMOUS.length)
+      expect(isLoading(example.persons), 'Persons should be loading once more')
+        .to.be.true
+      expect(
+        counters.persons,
+        'Update state of persons should have been detected'
+      ).to.equal(3)
       await promise
-      expect(example.persons.length).to.equal(0)
-      expect(isLoading(example.persons)).to.be.false
-      expect(counters.persons).to.equal(4)
-      expect(counters.boss).to.equal(0)
-      expect(counters.moto).to.equal(0)
+      expect(
+        example.persons,
+        'Persons should be updated with emptyness'
+      ).to.have.lengthOf(0)
+      expect(
+        isLoading(example.persons),
+        'New persons loading should be finished'
+      ).to.be.false
+      expect(
+        counters.persons,
+        'Update state of persons should have been detected'
+      ).to.equal(4)
+      expect(counters.boss, 'Boss state should not have changed').to.equal(0)
+      expect(counters.moto, 'Moto state should not have changed').to.equal(0)
     })
   })
 
@@ -102,23 +226,48 @@ describe('@loadable', function() {
     it('must indicate when loading', async function() {
       let promise
       promise = example.loadBoss()
-      expect(example.boss).to.deep.equal(FAMOUS[0])
-      expect(isLoading(example.boss)).to.be.true
-      expect(counters.boss).to.equal(1)
+      expect(example.boss, 'Boss should have last value').to.deep.equal(
+        FAMOUS[0]
+      )
+      expect(isLoading(example.boss), 'Boss should be loading').to.be.true
+      expect(
+        counters.boss,
+        'Update state of boss should have been detected'
+      ).to.equal(1)
       await promise
-      expect(example.boss).to.deep.equal(FAMOUS[1])
-      expect(isLoading(example.boss)).to.be.false
-      expect(counters.boss).to.equal(2)
+      expect(example.boss, 'Boss should have loaded value').to.deep.equal(
+        FAMOUS[1]
+      )
+      expect(isLoading(example.boss), 'Boss should not be loading anymore').to
+        .be.false
+      expect(
+        counters.boss,
+        'Update state of boss should have been detected'
+      ).to.equal(2)
       promise = example.loadBoss()
-      expect(example.boss).to.deep.equal(FAMOUS[1])
-      expect(isLoading(example.boss)).to.be.true
-      expect(counters.boss).to.equal(3)
+      expect(example.boss, 'Boss should still have loaded value').to.deep.equal(
+        FAMOUS[1]
+      )
+      expect(isLoading(example.boss), 'Boss should be loading once more').to.be
+        .true
+      expect(
+        counters.boss,
+        'Update state of boss should have been detected'
+      ).to.equal(3)
       await promise
-      expect(example.boss).to.deep.equal(FAMOUS[2])
-      expect(isLoading(example.boss)).to.be.false
-      expect(counters.boss).to.equal(4)
-      expect(counters.persons).to.equal(0)
-      expect(counters.moto).to.equal(0)
+      expect(example.boss, 'Boss should have new loaded value').to.deep.equal(
+        FAMOUS[2]
+      )
+      expect(isLoading(example.boss), 'New boss loading should be finished').to
+        .be.false
+      expect(
+        counters.boss,
+        'Update state of boss should have been detected'
+      ).to.equal(4)
+      expect(counters.persons, 'Person state should not have changed').to.equal(
+        0
+      )
+      expect(counters.moto, 'Moto state should not have changed').to.equal(0)
     })
   })
 
@@ -126,14 +275,23 @@ describe('@loadable', function() {
     it('must indicate when loading', async function() {
       let promise
       promise = example.loadMoto()
-      expect(isLoading(example.moto)).to.be.true
-      expect(counters.moto).to.equal(1)
+      expect(isLoading(example.moto), 'Moto should be loading').to.be.true
+      expect(
+        counters.moto,
+        'Update state of moto should have been detected'
+      ).to.equal(1)
       await promise
-      expect(example.moto).to.be.an('object')
-      expect(isLoading(example.moto)).to.be.false
-      expect(counters.moto).to.equal(2)
-      expect(counters.persons).to.equal(0)
-      expect(counters.boss).to.equal(0)
+      expect(example.moto, 'Unexpected moto loaded value').to.be.an('object')
+      expect(isLoading(example.moto), 'Moto should not be loading anymore').to
+        .be.false
+      expect(
+        counters.moto,
+        'Update state of moto should have been detected'
+      ).to.equal(2)
+      expect(counters.persons, 'Person state should not have changed').to.equal(
+        0
+      )
+      expect(counters.boss, 'Boss state should not have changed').to.equal(0)
     })
   })
 })
