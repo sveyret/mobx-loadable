@@ -50,10 +50,7 @@ const $loadable = Symbol('Loadable data')
 export function loadable(): PropertyDecorator
 // tslint:disable-next-line:ban-types (This is taken from PropertyDecorator signature)
 export function loadable(target: Object, propertyKey: string | symbol): void
-export function loadable(
-  target?: any,
-  propertyKey?: string | symbol
-): PropertyDecorator | void {
+export function loadable(target?: any, propertyKey?: string | symbol): PropertyDecorator | void {
   // Called as a factory
   if (propertyKey === undefined) {
     return loadable
@@ -111,8 +108,7 @@ export function load(
   } else {
     return (target: any, _key, descriptor) => {
       if (target[$loadable] && target[$loadable][propertyKey]) {
-        const loadableProperty: LoadableProperty =
-          target[$loadable][propertyKey]
+        const loadableProperty: LoadableProperty = target[$loadable][propertyKey]
         const originalMethod: any = descriptor.value!
         descriptor.value = function(this: any, ...args: any[]) {
           loadableProperty.updateLoading(statusExtractor(...args))
